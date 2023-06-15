@@ -5,7 +5,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/TelegramBot.php';
 
-use \Dejurin\GoogleTranslateForFree;
+use \Statickidz\GoogleTranslate;
 
 $token = '6292313365:AAFTv8gkQwbYgAyhJjLl-syLbp17IB9oWvw';
 
@@ -64,7 +64,26 @@ if ($text === '/start') {
         'text' => "Это уже активный язык",
         'show_alert' => false,
     ]);
+} elseif (!empty($text)) {
+    $data = get_chat_id($chat_id);
+    $source = ($data['lang'] === 'en') ? 'en' : 'ru';
+    $target = ($data['lang'] === 'ru') ? 'en' : 'ru';
+    $attempts = 5;
 
+    $tr = new GoogleTranslate();
+    $result = $tr->translate($source, $target, $text);
+
+    if ($result) {
+        $response = $telegram->sendMessage([
+            'chat_id' => $chat_id,
+            'text' => $result,
+        ]);
+    } else {
+        $response = $telegram->sendMessage([
+            'chat_id' => $chat_id,
+            'text' => 'Упс... я не смог перевести это...',
+        ]);
+    }
 }
 
 function get_keyboard($lang): array
