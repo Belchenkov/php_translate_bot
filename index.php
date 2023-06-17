@@ -5,7 +5,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/TelegramBot.php';
 
-use \Dejurin\GoogleTranslateForFree;
+use \Statickidz\GoogleTranslate;
 
 $token = '6292313365:AAFTv8gkQwbYgAyhJjLl-syLbp17IB9oWvw';
 
@@ -15,6 +15,84 @@ $update = $telegram->getWebhookUpdates();
 
 file_put_contents(__DIR__ . '/logs.txt', print_r($update, 1), FILE_APPEND);
 
-$chat_id = $update['message']['chat']['id'];
-$text = $update['message']['text'];
+$chat_id = $update['message']['chat']['id'] ?? '';
+$text = $update['message']['text'] ?? '';
+
+if ($text === '/start') {
+    $data = get_chat_id($chat_id);
+
+    if (empty($data)) {
+        add_chat_id($chat_id, $update['message']['chat']['first_name'], 'en');
+        $check = 'en';
+    } else {
+        $check = $data['lang'];
+    }
+
+    $response = $telegram->sendMessage([
+        'chat_id' => $chat_id,
+        'text' => "Оставьте отмеченный язык для перевода с него или выберите другой",
+        'reply_markup' => $telegram->replyKeyboardMarkup([
+            'inline_keyboard' => get_keyboard($check),
+        ])
+    ]);
+} elseif (isset($update['callback_query']['message'])) {
+    foreach ($update['callback_query']['message']['reply_markup']['inline_keyboard'][0] as $item) {
+        if ($item['text'] === $update['callback_query']['data']) {
+
+            update_chat($update['callback_query']['message']['chat']['id'], $update['callback_query']['data']);
+
+            $response = $telegram->answerCallbackQuery([
+                'callback_query_id' => $update['callback_query']['id'],
+                /*'text' => "Язык перевода изменен на {$update['callback_query']['data']}",
+                'show_alert' => false,*/
+            ]);
+
+            $response = $telegram->sendMessage([
+                'chat_id' => $update['callback_query']['message']['chat']['id'],
+                'text' => "Можете вводить слово для перевода с выбранного языка",
+                'reply_markup' => $telegram->replyKeyboardMarkup([
+                    'inline_keyboard' => get_keyboard($update['callback_query']['data']),
+                ])
+            ]);
+
+            break;
+        }
+    }
+
+    $response = $telegram->answerCallbackQuery([
+        'callback_query_id' => $update['callback_query']['id'],
+        'text' => "Это уже активный язык",
+        'show_alert' => false,
+    ]);
+} elseif (!empty($text)) {
+    $data = get_chat_id($chat_id);
+    $source = ($data['lang'] === 'en') ? 'en' : 'ru';
+    $target = ($data['lang'] === 'ru') ? 'en' : 'ru';
+    $attempts = 5;
+
+    $tr = new GoogleTranslate();
+    $result = $tr->translate($source, $target, $text);
+
+    if ($result) {
+        $response = $telegram->sendMessage([
+            'chat_id' => $chat_id,
+            'text' => $result,
+        ]);
+    } else {
+        $response = $telegram->sendMessage([
+            'chat_id' => $chat_id,
+            'text' => 'Упс... я не смог перевести это...',
+        ]);
+    }
+}
+
+function get_keyboard($lang): array
+{
+    return [
+        [
+            ['text' => $lang === 'en' ? 'en 🗸' : 'en', 'callback_data' => 'en'],
+            ['text' => $lang === 'ru' ? 'ru 🗸' : 'ru', 'callback_data' => 'ru'],
+        ]
+    ];
+}
 
